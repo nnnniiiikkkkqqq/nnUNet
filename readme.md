@@ -8,6 +8,24 @@ If you are looking for nnU-Net v1, use the [v1 branch](https://github.com/MIC-DK
 
 ![nnU-Net overview](documentation/assets/nnU-Net_overview.png)
 
+## Perun Supercomputer Quick Start
+
+This fork is configured for running nnU-Net on the Perun supercomputer. Before launching jobs, check the fork-specific SLURM notes in [scripts/slurm_nUNet.md](scripts/slurm_nUNet.md) and use the job files in [scripts/](scripts/).
+
+### Prerequisites
+
+- Access to the Perun cluster and a working conda setup on the login node.
+- A conda environment named `nnunet`, preferably created with [environment.yml](environment.yml).
+- The nnU-Net storage paths available and writable: `nnUNet_raw`, `nnUNet_preprocessed`, and `nnUNet_results`.
+- The dataset prepared in the format expected by the preprocessing script in [scripts/prepare_nnunet_braTS_filtered.py](scripts/prepare_nnunet_braTS_filtered.py).
+
+### Launch order
+
+1. Create or update the environment.
+2. Run preprocessing with `sbatch scripts/nnunet_preprocess.slurm`.
+3. Run training with `sbatch scripts/train.slurm`.
+4. Check the output logs in `logs/`.
+
 ## Start Here
 
 - First-time setup: [Installation and setup](documentation/getting-started/installation-and-setup.md)
