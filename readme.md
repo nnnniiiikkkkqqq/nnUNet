@@ -10,7 +10,7 @@ If you are looking for nnU-Net v1, use the [v1 branch](https://github.com/MIC-DK
 
 ## Perun Supercomputer Quick Start
 
-This fork is configured for running nnU-Net on the Perun supercomputer. Before launching jobs, check the fork-specific SLURM notes in [scripts/slurm_nUNet.md](scripts/slurm_nUNet.md) and use the job files in [scripts/](scripts/).
+This fork is configured for running nnU-Net on the Perun supercomputer. Before launching jobs, check the fork-specific SLURM notes in [scripts/slurm_nUNet.md](scripts/slurm_nUNet.md) and use the job files in [scripts/](scripts/). Further instructions in this README can be followed in a case if you evaluate the solution locally, or on another server. DO NOT PROCEED, if using PERUN supercomputer.
 
 ### Prerequisites
 
@@ -25,6 +25,7 @@ This fork is configured for running nnU-Net on the Perun supercomputer. Before l
 2. Run preprocessing with `sbatch scripts/nnunet_preprocess.slurm`.
 3. Run training with `sbatch scripts/train.slurm`.
 4. Check the output logs in `logs/`.
+
 
 ## Start Here
 
