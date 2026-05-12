@@ -148,6 +148,8 @@ class LocalLogger:
             'mean_fg_dice': list(),
             'ema_fg_dice': list(),
             'dice_per_class_or_region': list(),
+            'pixel_accuracy': list(),
+            'pixel_f1': list(),
             'train_losses': list(),
             'val_losses': list(),
             'lrs': list(),
@@ -231,6 +233,15 @@ class LocalLogger:
 
     def load_checkpoint(self, checkpoint: dict):
         self.my_fantastic_logging = checkpoint
+        # Backward compatibility for checkpoints created before new logging keys were introduced.
+        if len(self.my_fantastic_logging) > 0:
+            max_len = max(len(v) for v in self.my_fantastic_logging.values())
+        else:
+            max_len = 0
+
+        for key in ('pixel_accuracy', 'pixel_f1'):
+            if key not in self.my_fantastic_logging:
+                self.my_fantastic_logging[key] = [float('nan')] * max_len
 
 
 class WandbLogger:

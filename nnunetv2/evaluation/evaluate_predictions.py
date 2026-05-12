@@ -106,9 +106,15 @@ def compute_metrics(reference_file: str, prediction_file: str, image_reader_writ
         if tp + fp + fn == 0:
             results['metrics'][r]['Dice'] = np.nan
             results['metrics'][r]['IoU'] = np.nan
+            results['metrics'][r]['F1'] = np.nan
         else:
             results['metrics'][r]['Dice'] = 2 * tp / (2 * tp + fp + fn)
             results['metrics'][r]['IoU'] = tp / (tp + fp + fn)
+            results['metrics'][r]['F1'] = 2 * tp / (2 * tp + fp + fn)
+        if tp + fp + fn + tn == 0:
+            results['metrics'][r]['Accuracy'] = np.nan
+        else:
+            results['metrics'][r]['Accuracy'] = (tp + tn) / (tp + fp + fn + tn)
         results['metrics'][r]['FP'] = fp
         results['metrics'][r]['TP'] = tp
         results['metrics'][r]['FN'] = fn

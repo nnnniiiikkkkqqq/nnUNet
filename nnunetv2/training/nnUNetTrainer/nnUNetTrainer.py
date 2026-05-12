@@ -1116,6 +1116,30 @@ class nnUNetTrainer(object):
 
         tp, fp, fn, _ = get_tp_fp_fn_tn(predicted_segmentation_onehot, target, axes=axes, mask=mask)
 
+        if self.label_manager.has_regions:
+            pred_fg = predicted_segmentation_onehot.bool().any(dim=1)
+            if target.shape[1] == predicted_segmentation_onehot.shape[1]:
+                target_fg = target.bool().any(dim=1)
+            else:
+                # Should not happen for region-based training, but we keep this for robustness.
+                target_fg = target[:, 0].long() > 0
+        else:
+            pred_fg = predicted_segmentation_onehot.argmax(1) > 0
+            if target.shape[1] == 1:
+                target_fg = target[:, 0].long() > 0
+            else:
+                target_fg = target.argmax(1) > 0
+
+        if mask is None:
+            valid_mask = torch.ones_like(pred_fg, dtype=torch.bool)
+        else:
+            valid_mask = mask[:, 0].bool()
+
+        tp_fg = ((pred_fg & target_fg) & valid_mask).sum().detach().cpu().item()
+        fp_fg = ((pred_fg & ~target_fg) & valid_mask).sum().detach().cpu().item()
+        fn_fg = ((~pred_fg & target_fg) & valid_mask).sum().detach().cpu().item()
+        tn_fg = ((~pred_fg & ~target_fg) & valid_mask).sum().detach().cpu().item()
+
         tp_hard = tp.detach().cpu().numpy()
         fp_hard = fp.detach().cpu().numpy()
         fn_hard = fn.detach().cpu().numpy()
@@ -1128,13 +1152,26 @@ class nnUNetTrainer(object):
             fp_hard = fp_hard[1:]
             fn_hard = fn_hard[1:]
 
-        return {'loss': l.detach().cpu().numpy(), 'tp_hard': tp_hard, 'fp_hard': fp_hard, 'fn_hard': fn_hard}
+        return {
+            'loss': l.detach().cpu().numpy(),
+            'tp_hard': tp_hard,
+            'fp_hard': fp_hard,
+            'fn_hard': fn_hard,
+            'tp_fg': tp_fg,
+            'fp_fg': fp_fg,
+            'fn_fg': fn_fg,
+            'tn_fg': tn_fg,
+        }
 
     def on_validation_epoch_end(self, val_outputs: List[dict]):
         outputs_collated = collate_outputs(val_outputs)
         tp = np.sum(outputs_collated['tp_hard'], 0)
         fp = np.sum(outputs_collated['fp_hard'], 0)
         fn = np.sum(outputs_collated['fn_hard'], 0)
+        tp_fg = np.sum(outputs_collated['tp_fg'])
+        fp_fg = np.sum(outputs_collated['fp_fg'])
+        fn_fg = np.sum(outputs_collated['fn_fg'])
+        tn_fg = np.sum(outputs_collated['tn_fg'])
 
         if self.is_ddp:
             world_size = dist.get_world_size()
@@ -1151,6 +1188,22 @@ class nnUNetTrainer(object):
             dist.all_gather_object(fns, fn)
             fn = np.vstack([i[None] for i in fns]).sum(0)
 
+            tps_fg = [None for _ in range(world_size)]
+            dist.all_gather_object(tps_fg, tp_fg)
+            tp_fg = np.sum(tps_fg)
+
+            fps_fg = [None for _ in range(world_size)]
+            dist.all_gather_object(fps_fg, fp_fg)
+            fp_fg = np.sum(fps_fg)
+
+            fns_fg = [None for _ in range(world_size)]
+            dist.all_gather_object(fns_fg, fn_fg)
+            fn_fg = np.sum(fns_fg)
+
+            tns_fg = [None for _ in range(world_size)]
+            dist.all_gather_object(tns_fg, tn_fg)
+            tn_fg = np.sum(tns_fg)
+
             losses_val = [None for _ in range(world_size)]
             dist.all_gather_object(losses_val, outputs_collated['loss'])
             loss_here = np.vstack(losses_val).mean()
@@ -1159,8 +1212,12 @@ class nnUNetTrainer(object):
 
         global_dc_per_class = [i for i in [2 * i / (2 * i + j + k) for i, j, k in zip(tp, fp, fn)]]
         mean_fg_dice = np.nanmean(global_dc_per_class)
+        pixel_accuracy = (tp_fg + tn_fg) / (tp_fg + tn_fg + fp_fg + fn_fg) if (tp_fg + tn_fg + fp_fg + fn_fg) > 0 else np.nan
+        pixel_f1 = (2 * tp_fg) / (2 * tp_fg + fp_fg + fn_fg) if (2 * tp_fg + fp_fg + fn_fg) > 0 else np.nan
         self.logger.log('mean_fg_dice', mean_fg_dice, self.current_epoch)
         self.logger.log('dice_per_class_or_region', global_dc_per_class, self.current_epoch)
+        self.logger.log('pixel_accuracy', pixel_accuracy, self.current_epoch)
+        self.logger.log('pixel_f1', pixel_f1, self.current_epoch)
         self.logger.log('val_losses', loss_here, self.current_epoch)
 
     def on_epoch_start(self):
@@ -1173,6 +1230,8 @@ class nnUNetTrainer(object):
         self.print_to_log_file('val_loss', np.round(self.logger.get_value('val_losses', step=-1), decimals=4))
         self.print_to_log_file('Pseudo dice', [np.round(i, decimals=4) for i in
                                                self.logger.get_value('dice_per_class_or_region', step=-1)])
+        self.print_to_log_file('Pixel Accuracy', np.round(self.logger.get_value('pixel_accuracy', step=-1), decimals=4))
+        self.print_to_log_file('Pixel F1', np.round(self.logger.get_value('pixel_f1', step=-1), decimals=4))
         self.print_to_log_file(
             f"Epoch time: {np.round(self.logger.get_value('epoch_end_timestamps', step=-1) - self.logger.get_value('epoch_start_timestamps', step=-1), decimals=2)} s")
 
